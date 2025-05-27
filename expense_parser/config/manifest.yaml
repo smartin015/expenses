@@ -37,3 +37,12 @@ Chase:
     debit: 'Amount'
   negative_debit: True
   rules: 'expenses_credit.csv'
+Spliit:
+  json_header_match: "participants"
+  participant_id: "Xa5IFvRWcDOY9FPAaSrmI"
+  hdr:
+    date: 'expenseDate'
+    desc: 'title'
+    category: 'category.name'
+    debit: 'computedAmount'
+  rules: 'expenses_spliit.csv'
