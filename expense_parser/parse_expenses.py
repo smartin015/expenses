@@ -13,6 +13,7 @@ from dateutil import tz as dtz
 import hashlib
 import time
 from openai import OpenAI
+from dotenv import load_dotenv
 
 tz = dtz.gettz("America/New_York")
 
@@ -24,13 +25,13 @@ class AICategorizer:
         self.cache_file_path = cache_file_path
         self.cache = {}
         self.existing_categories = existing_categories or [
-            "Food", "Merch", "Travel", "Recurring", "Healthcare", "Utilities", 
+            "Food", "Merch", "Travel", "Recurring", "Healthcare", "Utilities",
             "Entertainment", "Transportation", "Home", "Personal", "Other"
         ]
         self.client = None
         self._load_cache()
         self._init_openai()
-    
+
     def _init_openai(self):
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
@@ -41,12 +42,12 @@ class AICategorizer:
             log.info("OpenAI client initialized successfully")
         except Exception as e:
             log.error(f"Failed to initialize OpenAI client: {e}")
-    
+
     def _load_cache(self):
         """Load existing AI categorizations from cache file"""
         if not os.path.exists(self.cache_file_path):
             return
-        
+
         try:
             with open(self.cache_file_path, 'r') as f:
                 reader = csv.reader(f)
@@ -61,19 +62,19 @@ class AICategorizer:
             log.info(f"Loaded {len(self.cache)} AI categorizations from cache")
         except Exception as e:
             log.error(f"Error loading AI cache: {e}")
-    
+
     def _save_to_cache(self, description, category):
         """Save a new categorization to the cache file"""
         desc_hash = hashlib.md5(description.lower().encode()).hexdigest()[:16]
         timestamp = datetime.datetime.now().isoformat()
-        
+
         # Update in-memory cache
         self.cache[desc_hash] = {
             'description': description,
             'category': category,
             'timestamp': timestamp
         }
-        
+
         # Append to file
         try:
             with open(self.cache_file_path, 'a') as f:
@@ -82,11 +83,11 @@ class AICategorizer:
             log.info(f"Cached AI categorization: {description} -> {category}")
         except Exception as e:
             log.error(f"Error saving to AI cache: {e}")
-    
+
     def _get_description_hash(self, description):
         """Get hash for description lookup"""
         return hashlib.md5(description.lower().encode()).hexdigest()[:16]
-    
+
     def categorize(self, description):
         """Categorize an expense description using AI, with caching"""
         # Check cache first (even without API client)
@@ -95,11 +96,11 @@ class AICategorizer:
             cached = self.cache[desc_hash]
             log.info(f"Using cached AI categorization: {description} -> {cached['category']}")
             return cached['category']
-        
+
         # If not in cache and no API client, return None
         if not self.client:
             return None
-        
+
         # Call ChatGPT API
         try:
             prompt = f"""Categorize this expense description into one of these categories: {', '.join(self.existing_categories)}
@@ -108,7 +109,7 @@ Expense description: "{description}"
 
 Choose the most appropriate category from the list above. If none fit well, use "Other".
 Respond with only the category name, nothing else."""
-            
+
             response = self.client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
@@ -118,19 +119,19 @@ Respond with only the category name, nothing else."""
                 max_tokens=50,
                 temperature=0.1
             )
-            
+
             category = response.choices[0].message.content.strip()
-            
+
             # Validate that the category is from our list
             if category not in self.existing_categories:
                 log.warning(f"AI returned invalid category '{category}' for '{description}', using 'Other'")
                 category = "Other"
-            
+
             # Save to cache
             self._save_to_cache(description, category)
             log.info(f"AI categorized: {description} -> {category}")
             return category
-            
+
         except Exception as e:
             log.error(f"Error calling OpenAI API: {e}")
             return None
@@ -179,7 +180,7 @@ class TxnPrinter:
             category = row[self.category_idx]
         else:
             category = ''
-        
+
         # First try manual rules
         manual_category_found = False
         for (field, regex, cat) in self.matchers:
@@ -192,11 +193,11 @@ class TxnPrinter:
                 category = cat
                 manual_category_found = True
                 break
-        
+
         if category == "OMIT":
             log.warning(f"Omitting {row[self.desc_idx]} (${str(debit)})")
             return False
-        
+
         # If no manual category found and we have an AI categorizer, try AI categorization
         if not manual_category_found and (not category or category.strip() == '') and self.ai_categorizer:
             ai_category = self.ai_categorizer.categorize(row[self.desc_idx])
@@ -211,6 +212,12 @@ class TxnPrinter:
         print(out)
         return True
 
+def _sanitize_hdr(s):
+    s = re.sub(r'[^\x00-\x7f]',r' ',s)  # Remove non-ascii
+    s = re.sub('[^\w\s]+', '', s) # Remove non-word, non-space
+    return s.strip()
+
+
 def parse_csv(prev_lut, manifest, path, interval_start, inteval_end, filestats, ai_categorizer=None):
     with open(path, encoding='latin1') as f:
         log.info(f"Reading {path}")
@@ -221,11 +228,12 @@ def parse_csv(prev_lut, manifest, path, interval_start, inteval_end, filestats, 
     else:
         header_idx = 0
 
-    hdr = dict([(v,i) for (i, v) in enumerate(data[header_idx].split(","))])
+    hdr = dict([(_sanitize_hdr(v),i) for (i, v) in enumerate(data[header_idx].split(","))])
     printer = None
     for name, cfg in manifest.items():
       if 'match' not in cfg:
             continue
+      log.info(f"Header keys {list(hdr.keys())}")
       if cfg['match'] in hdr.keys():
           log.info(f'Match on parser {name}')
           if cfg.get('pass', False):
@@ -338,6 +346,7 @@ if __name__ == "__main__":
     ap.add_argument('--disable-ai', action='store_true', help='Disable AI categorization')
     args = ap.parse_args(sys.argv[1:])
 
+    load_dotenv()
     # Initialize AI categorizer
     if not args.disable_ai:
         cache_file = os.path.join(os.path.dirname(__file__), "config/ai_categorizations.csv")
@@ -350,7 +359,8 @@ if __name__ == "__main__":
     # Interval a little bit before and after the month duration, to account for overlap
     interval_end = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).astimezone(tz)
     while interval_end.day != 27:
-        interval_end += datetime.timedelta(days=3)
+        interval_end -= datetime.timedelta(days=1)
+    interval_end += datetime.timedelta(days=3)
     interval_start = interval_end - datetime.timedelta(days=30 + 7)
 
     log.info(f"Printing transactions from {interval_start} to {interval_end}, excluding any already listed in {args.prev}")
@@ -358,6 +368,6 @@ if __name__ == "__main__":
     filestats = parse_expenses(args.prev, args.paths, interval_start, interval_end, ai_categorizer)
 
     log.info(f"===================")
-    log.info("Parsed {len(args.paths)} files:")
+    log.info(f"Parsed {len(args.paths)} files:")
     for k,v in filestats.items():
         log.info(f"{k.ljust(40)}\t{v} item(s) parsed")

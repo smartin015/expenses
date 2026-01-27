@@ -8,7 +8,7 @@ Splitwise:
   negative_debit: True
   rules: 'expenses_splitwise.csv'
 CapitalOne:
-  match: 'Card No.'
+  match: 'Card No'
   hdr:
     date: 'Transaction Date'
     desc: 'Description'
@@ -38,11 +38,11 @@ Chase:
   negative_debit: True
   rules: 'expenses_credit.csv'
 Spliit:
-  json_header_match: "participants"
-  participant_id: "Xa5IFvRWcDOY9FPAaSrmI"
+  match: "Split mode"
   hdr:
-    date: 'expenseDate'
-    desc: 'title'
-    category: 'category.name'
-    debit: 'computedAmount'
+    date: 'Date'
+    desc: 'Description'
+    category: 'Category'
+    debit: 'Scott'
+  negative_debit: False
   rules: 'expenses_spliit.csv'
