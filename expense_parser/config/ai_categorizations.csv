@@ -1,0 +1,6 @@
+# AI-generated expense categorizations cache
+# Format: description_hash,description,category,timestamp
+# This file is automatically updated when ChatGPT categorizes new expenses
+56edcea26334afbc,CVS PHARMACY 123,Healthcare,2025-06-01T00:00:00
+d91bd4aabbbda6f1,UBER EATS ORDER,Food,2025-06-01T00:00:00
+084b9a35bf7a90ee,NETFLIX.COM,Entertainment,2025-06-01T00:00:00
