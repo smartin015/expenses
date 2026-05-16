@@ -137,12 +137,13 @@ Respond with only the category name, nothing else."""
             return None
 
 class TxnPrinter:
-    def __init__(self, name, date_idx, desc_idx, category_idx, debit_idx, negative_debit=False, prev_expenses={}, ai_categorizer=None):
+    def __init__(self, name, date_idx, desc_idx, category_idx, debit_idx, total_idx=None, negative_debit=False, prev_expenses={}, ai_categorizer=None):
         self.name = name
         self.date_idx = date_idx
         self.desc_idx = desc_idx
         self.category_idx = category_idx
         self.debit_idx = debit_idx
+        self.total_idx = total_idx
         self.prev_lut = prev_expenses
         self.matchers = []
         self.negative_debit = negative_debit
@@ -170,6 +171,8 @@ class TxnPrinter:
             if debit.strip() == "":
                 return False
             debit = float(debit)
+        if self.total_idx and debit > 0: # Splitting logic; only if we paid
+            debit = float(row[self.total_idx]) - debit
         if self.negative_debit:
             debit = -debit
         if abs(debit) < 0.01:
@@ -205,7 +208,7 @@ class TxnPrinter:
                 category = ai_category
 
         desc = row[self.desc_idx].replace("\"", "")
-        out = f"{date.strftime('%Y-%m-%d')}, \"{desc}\", {category}, {debit}"
+        out = f"{date.strftime('%Y-%m-%d')}, \"{desc}\", {category}, ${debit:.2f}"
         if out in self.prev_lut:
             log.warning(f"Omit previously exported row: {out}")
             return False
@@ -214,7 +217,7 @@ class TxnPrinter:
 
 def _sanitize_hdr(s):
     s = re.sub(r'[^\x00-\x7f]',r' ',s)  # Remove non-ascii
-    s = re.sub('[^\w\s]+', '', s) # Remove non-word, non-space
+    s = re.sub(r'[^\w\s]+', '', s) # Remove non-word, non-space
     return s.strip()
 
 
@@ -245,6 +248,7 @@ def parse_csv(prev_lut, manifest, path, interval_start, inteval_end, filestats, 
               desc_idx = hdr[cfg['hdr']['desc']],
               category_idx = hdr.get(cfg['hdr']['category']),
               debit_idx = hdr[cfg['hdr']['debit']],
+              total_idx = hdr[cfg['hdr']['total']] if 'total' in cfg['hdr'] else None,
               negative_debit = cfg['negative_debit'],
               prev_expenses = prev_lut,
               ai_categorizer = ai_categorizer,
@@ -266,53 +270,6 @@ def parse_csv(prev_lut, manifest, path, interval_start, inteval_end, filestats, 
 
 
 
-def parse_json(prev_lut, manifest, path, interval_start, inteval_end, filestats, ai_categorizer=None):
-    with open(path, encoding='utf8') as f:
-        data = json.loads(f.read())
-    printer = None
-    participant_id = None
-    for name, cfg in manifest.items():
-        if 'json_header_match' not in cfg or not data.get(cfg['json_header_match']):
-            continue
-        log.info(f"Match on parser {name}")
-        printer = TxnPrinter(
-                name,
-                date_idx = cfg["hdr"]["date"],
-                desc_idx = cfg["hdr"]["desc"],
-                category_idx = cfg["hdr"]["category"],
-                debit_idx = cfg["hdr"]["debit"],
-                negative_debit = False,
-                prev_expenses = prev_lut,
-                ai_categorizer = ai_categorizer,
-        )
-        participant_id = cfg['participant_id']
-        printer.loadCategoryMap(os.path.join(os.path.dirname(__file__), f"./config/{cfg['rules']}"))
-        break
-
-    if printer is None:
-        log.error(f"ERROR: origin of file {path} not resolved")
-        sys.exit(1)
-
-    for row in data["expenses"]:
-        # {"expenseDate":"2025-03-11T00:00:00.000Z",
-        # "title":"groceries",
-        # "category":{"grouping":"Uncategorized","name":"General"},
-        # "amount":5918,
-        # "paidById":"Xa5IFvRWcDOY9FPAaSrmI",
-        # "paidFor":[{"participantId":"Xa5IFvRWcDOY9FPAaSrmI","shares":200},{"participantId":"Z6dxevKGICs39HibSzjOu","shares":100}],
-        # "isReimbursement":false,
-        # "splitMode":"BY_SHARES"}
-        amount = row['amount']
-        if row['splitMode'] == "BY_SHARES":
-            self_shares = sum([p['shares'] for p in row['paidFor'] if p['participantId'] == participant_id])
-            other_shares = sum([p['shares'] for p in row['paidFor'] if p['participantId'] != participant_id])
-            amount = amount * (-other_shares if row['paidById'] == participant_id else self_shares) / (100 * (self_shares + other_shares))
-            amount = round(amount, 2)
-        row["computedAmount"] = amount
-        row["category.name"] = row["category"]["name"]
-
-        printed = printer.printRow(row, interval_start, interval_end)
-        filestats[f"({printer.name})\t {path}"] += 1 if printed else 0
 
 def parse_expenses(prev, paths, interval_start, interval_end, ai_categorizer=None):
     filestats = defaultdict(int)

@@ -1,3 +1,13 @@
+Spliit:
+  match: "Split mode"
+  hdr:
+    date: 'Date'
+    desc: 'Description'
+    category: 'Category'
+    debit: 'Scott' 
+    total: 'Cost' # Debit and cost are used to compute actual line item
+  negative_debit: True
+  rules: 'expenses_spliit.csv'
 Splitwise:
   match: 'Scott'
   hdr:
@@ -37,12 +47,3 @@ Chase:
     debit: 'Amount'
   negative_debit: True
   rules: 'expenses_credit.csv'
-Spliit:
-  match: "Split mode"
-  hdr:
-    date: 'Date'
-    desc: 'Description'
-    category: 'Category'
-    debit: 'Scott'
-  negative_debit: False
-  rules: 'expenses_spliit.csv'
