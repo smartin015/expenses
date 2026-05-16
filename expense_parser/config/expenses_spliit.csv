@@ -1,0 +1,2 @@
+# Format: [category|desc] [actualcategorynamenospaces|OMIT] [regexp]
+desc      Food   .*
